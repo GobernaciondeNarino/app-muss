@@ -1,0 +1,33 @@
+# Musa Café · Protección del panel de administración
+#
+# ---------------------------------------------------------------------------
+# AUTENTICACIÓN DE APACHE (opcional pero recomendada)
+#
+# El panel SIEMPRE pide usuario y contraseña: si Apache no aplica estas
+# directivas, el propio PHP valida contra el mismo archivo .htpasswd.
+#
+# Para activar además la ventana de autenticación del navegador, quita el
+# comentario (#) de las cuatro líneas siguientes y reemplaza RUTA_ABSOLUTA por
+# la ruta real de esta carpeta en el servidor. En Plesk suele ser:
+#   /var/www/vhosts/TU-DOMINIO/httpdocs/wj-admin/.htpasswd
+#
+# La ruta exacta de tu instalación aparece en el panel, en «Acceso».
+# ---------------------------------------------------------------------------
+
+# AuthType Basic
+# AuthName "Panel Musa Cafe"
+# AuthUserFile RUTA_ABSOLUTA/wj-admin/.htpasswd
+# Require valid-user
+
+# El archivo de credenciales nunca se sirve por web.
+<FilesMatch "^\.(htpasswd|htaccess)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+Options -Indexes
