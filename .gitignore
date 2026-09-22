@@ -1,0 +1,18 @@
+# Configuración y datos vivos del sitio (se generan en el servidor)
+wj-content/config/ajustes.json.php
+wj-content/config/claves.php
+wj-content/datos/registros.json.php
+wj-content/datos/*.lock
+wj-content/audio/*
+!wj-content/audio/.gitkeep
+!wj-content/audio/.htaccess
+wj-content/logs/*
+!wj-content/logs/.gitkeep
+!wj-content/logs/.htaccess
+wj-content/subidas/*
+!wj-content/subidas/.gitkeep
+!wj-content/subidas/.htaccess
+
+# Sistema
+.DS_Store
+Thumbs.db
