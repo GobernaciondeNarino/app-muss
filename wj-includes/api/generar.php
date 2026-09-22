@@ -52,9 +52,18 @@ if (!empty($resultado['ok']) && !empty(musa_dato($ajustes, 'correo.activo', true
     }
 }
 
+/*
+ * El detalle técnico (clave vencida, cupo agotado, etc.) queda en el registro y en la
+ * bitácora para el panel; a la persona se le responde con un mensaje entendible.
+ */
+$publico = !empty($resultado['ok'])
+    ? (string) $resultado['mensaje']
+    : 'Tu registro quedó guardado, pero la canción no se pudo componer en este momento. '
+      . 'El equipo de Musa Café la revisará y te avisará al correo.';
+
 musa_responder_json(array(
     'ok'       => !empty($resultado['ok']),
-    'mensaje'  => $resultado['mensaje'],
+    'mensaje'  => $publico,
     'estado'   => (string) $registro['estado'],
     'creado'   => !empty($registro['creado']),
     'enviado'  => !empty($registro['enviado']),

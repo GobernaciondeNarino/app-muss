@@ -92,6 +92,16 @@ puede disparar la generación de una solicitud ajena.
 
 Devuelve el estado actual del registro. Mismo control de acceso por `clave`.
 
+### `POST wj-includes/api/transcribir.php`
+
+`multipart/form-data` con `token` (CSRF) y `audio` (el dictado grabado en el navegador).
+Devuelve `{ "ok": true, "texto": "…", "motor": "ElevenLabs" }`.
+
+Controles antes de gastar créditos: tamaño máximo de 10 MB, el tipo se reconoce por los
+primeros bytes del archivo (`musa_tipo_audio()`, no por lo que declara el cliente), el
+temporal se borra en cuanto se lee, y `musa_limite_uso()` corta a N transcripciones por
+hora y por IP. El audio nunca se guarda en disco.
+
 ---
 
 ## 4. Almacenamiento
@@ -146,7 +156,28 @@ rejilla CSS con las imágenes y los colores configurados.
 
 ---
 
-## 6. Integración con las APIs
+## 6. Dictado por voz
+
+Dos motores, escogidos en el navegador por `Dictado.elegirMotor()` según el modo configurado:
+
+1. **Navegador** (`SpeechRecognition` / `webkitSpeechRecognition`): sin costo ni servidor.
+   Muestra el texto provisional en la línea de estado y añade al textarea solo los tramos
+   finales. Si el motor falla con un error de servicio y hay API disponible, cambia solo al
+   segundo motor.
+2. **Servidor** (`MediaRecorder` → `api/transcribir.php`): graba en `audio/webm`, corta a
+   los segundos configurados y envía el audio a ElevenLabs (`/v1/speech-to-text`) o a
+   Google (`generateContent` con el audio en `inlineData`). Si el proveedor principal
+   falla, se intenta con el otro.
+
+El botón solo se muestra si alguno de los dos motores puede funcionar de verdad, y el
+espacio para él en el textarea se reserva con la clase `con-dictado` para no dejar un
+hueco cuando el dictado está desactivado. El texto reconocido se añade al final de lo ya
+escrito respetando `maxlength`, y se dispara un evento `input` para que el contador y la
+validación del paso 1 se actualicen solos.
+
+Requisitos del navegador: contexto seguro (HTTPS o localhost) y permiso de micrófono.
+
+## 7. Integración con las APIs
 
 ### ElevenLabs
 `POST {endpoint}/v1/music?output_format=mp3_44100_128` con la cabecera `xi-api-key` y el
@@ -168,7 +199,7 @@ respuesta es `429` o `5xx` (los modelos devuelven `503` cuando están saturados)
 
 ---
 
-## 7. Correo
+## 8. Correo
 
 `musa_correo_enviar()` arma un mensaje MIME `multipart/alternative` (texto + HTML con la
 identidad de Musa Café) y, si el MP3 pesa menos del máximo configurado, lo envuelve en un
@@ -180,7 +211,7 @@ Dos caminos de salida: la función `mail()` de PHP o un cliente SMTP propio
 
 ---
 
-## 8. Convenciones de código
+## 9. Convenciones de código
 
 - Funciones y variables en español, con el prefijo `musa_` en PHP.
 - Sintaxis compatible con PHP 7.4: `array()`, sin tipos de retorno nuevos, sin `match`.
@@ -192,7 +223,7 @@ Dos caminos de salida: la función `mail()` de PHP o un cliente SMTP propio
 
 ---
 
-## 9. Cómo añadir algo
+## 10. Cómo añadir algo
 
 | Quiero… | Dónde |
 |---|---|
@@ -200,6 +231,7 @@ Dos caminos de salida: la función `mail()` de PHP o un cliente SMTP propio
 | Otro proveedor de IA | `musa_ia_proveedores()`, una función `musa_ia_generar_*()` y el caso correspondiente en `musa_ia_generar()`. |
 | Otro idioma | Los textos ya están en los ajustes; basta con duplicar el archivo de configuración. |
 | Cambiar la disposición de la grilla | `cajasDeBotones()` en `wj-includes/js/app.js`. |
+| Dictado en otro campo | Reutilizar el módulo `Dictado` apuntando `area` y `boton` al nuevo campo. |
 
 ---
 

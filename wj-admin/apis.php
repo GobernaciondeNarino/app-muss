@@ -38,6 +38,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         musa_fijar($nuevos, 'ia.google.modelo_musica', musa_texto($_POST['ia']['google']['modelo_musica'] ?? 'lyria-3.5', 80));
         musa_fijar($nuevos, 'ia.google.generar_audio', !empty($_POST['ia']['google']['generar_audio']));
 
+        $modo = musa_texto($_POST['ia']['transcripcion']['modo'] ?? 'ambos', 20);
+        musa_fijar($nuevos, 'ia.transcripcion.modo', in_array($modo, array('navegador', 'servidor', 'ambos', 'ninguno'), true) ? $modo : 'ambos');
+        $idioma = musa_texto($_POST['ia']['transcripcion']['idioma'] ?? 'es-CO', 10);
+        musa_fijar($nuevos, 'ia.transcripcion.idioma', preg_match('/^[a-z]{2}(-[A-Z]{2})?$/', $idioma) ? $idioma : 'es-CO');
+        musa_fijar($nuevos, 'ia.transcripcion.maximo_segundos', max(15, min(300, (int) ($_POST['ia']['transcripcion']['maximo_segundos'] ?? 120))));
+        musa_fijar($nuevos, 'ia.transcripcion.limite_por_hora', max(0, min(500, (int) ($_POST['ia']['transcripcion']['limite_por_hora'] ?? 30))));
+        musa_fijar($nuevos, 'ia.transcripcion.elevenlabs_modelo', musa_texto($_POST['ia']['transcripcion']['elevenlabs_modelo'] ?? 'scribe_v1', 60));
+        musa_fijar($nuevos, 'ia.transcripcion.google_modelo', musa_texto($_POST['ia']['transcripcion']['google_modelo'] ?? 'gemini-3.6-flash', 80));
+
         musa_guardar_ajustes($nuevos);
         musa_log('Configuración de IA guardada', array('usuario' => $usuarioActual, 'proveedor' => musa_dato($nuevos, 'ia.proveedor', '')));
         musa_panel_mensaje('Configuración de APIs guardada.');
@@ -187,6 +196,49 @@ musa_panel_mensaje();
   <?php else : ?>
     <p class="nota"><?php echo count($modelosGoogle); ?> modelos disponibles con esta clave.</p>
   <?php endif; ?>
+</section>
+
+<section class="bloque-panel">
+  <h2>Dictado por voz</h2>
+  <p class="nota">El micrófono que aparece en el campo «Cuéntanos la historia de tu canción» permite
+    dictar el texto en vez de escribirlo.</p>
+  <div class="opciones-proveedor">
+    <?php
+    $modoActual = musa_transcripcion_modo($ajustesPanel);
+    $modos = array(
+        'ambos'     => array('Navegador y servidor', 'Usa el dictado del navegador y, si no lo soporta, graba y transcribe con la API.'),
+        'navegador' => array('Solo el navegador', 'Gratis e inmediato. Funciona en Chrome, Edge y Safari.'),
+        'servidor'  => array('Solo el servidor', 'Graba el audio y lo transcribe con la API configurada. Funciona en cualquier navegador y consume créditos.'),
+        'ninguno'   => array('Desactivado', 'No se muestra el micrófono.'),
+    );
+    foreach ($modos as $clave => $info) : ?>
+      <label class="opcion <?php echo $modoActual === $clave ? 'activa' : ''; ?>">
+        <input type="radio" name="ia[transcripcion][modo]" value="<?php echo musa_e($clave); ?>" <?php echo $modoActual === $clave ? 'checked' : ''; ?>>
+        <strong><?php echo musa_e($info[0]); ?></strong>
+        <span><?php echo musa_e($info[1]); ?></span>
+      </label>
+    <?php endforeach; ?>
+  </div>
+  <div class="rejilla">
+    <label>Idioma del dictado
+      <input type="text" name="ia[transcripcion][idioma]" value="<?php echo musa_e(musa_dato($ajustesPanel, 'ia.transcripcion.idioma', 'es-CO')); ?>" placeholder="es-CO">
+    </label>
+    <label>Duración máxima de la grabación (segundos)
+      <input type="number" name="ia[transcripcion][maximo_segundos]" min="15" max="300" value="<?php echo (int) musa_dato($ajustesPanel, 'ia.transcripcion.maximo_segundos', 120); ?>">
+    </label>
+    <label>Máximo de transcripciones por hora y por IP
+      <input type="number" name="ia[transcripcion][limite_por_hora]" min="0" max="500" value="<?php echo (int) musa_dato($ajustesPanel, 'ia.transcripcion.limite_por_hora', 30); ?>">
+    </label>
+    <label>Modelo de ElevenLabs
+      <input type="text" name="ia[transcripcion][elevenlabs_modelo]" value="<?php echo musa_e(musa_dato($ajustesPanel, 'ia.transcripcion.elevenlabs_modelo', 'scribe_v1')); ?>">
+    </label>
+    <label>Modelo de Google
+      <input type="text" name="ia[transcripcion][google_modelo]" list="modelos-google" value="<?php echo musa_e(musa_dato($ajustesPanel, 'ia.transcripcion.google_modelo', 'gemini-3.6-flash')); ?>">
+    </label>
+  </div>
+  <p class="nota">Estado en este momento:
+    <strong><?php echo musa_transcripcion_servidor_disponible($ajustesPanel) ? 'la transcripción por servidor está disponible' : 'solo dictado del navegador (sin clave de API para transcribir)'; ?></strong>.
+    El dictado del navegador necesita que el sitio se sirva por HTTPS.</p>
 </section>
 
 <section class="bloque-panel">

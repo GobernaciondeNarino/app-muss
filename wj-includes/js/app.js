@@ -456,6 +456,232 @@
     };
   })();
 
+
+  /* ============================================================ Dictado por voz */
+
+  var Dictado = (function () {
+    var CONF = CFG.dictado || {};
+    var boton, area, estado;
+    var motor = '';            // navegador | servidor
+    var activo = false;
+    var reconocimiento = null;
+    var grabadora = null, pista = null, trozos = [];
+    var cuentaAtras = null, restantes = 0;
+    var detenidoPorUsuario = false;
+
+    function soportaNavegador() {
+      return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    }
+
+    function soportaGrabacion() {
+      return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder &&
+        (window.isSecureContext || location.hostname === 'localhost' || location.hostname === '127.0.0.1'));
+    }
+
+    function elegirMotor() {
+      var modo = CONF.modo || 'ninguno';
+      if (modo === 'ninguno') { return ''; }
+      if ((modo === 'navegador' || modo === 'ambos') && soportaNavegador()) { return 'navegador'; }
+      if ((modo === 'servidor' || modo === 'ambos') && CONF.servidor && soportaGrabacion()) { return 'servidor'; }
+      return '';
+    }
+
+    function decir(texto, clase) {
+      if (!estado) { return; }
+      estado.textContent = texto || '';
+      estado.className = 'estado-dictado' + (clase ? ' ' + clase : '');
+    }
+
+    function marcar(encendido) {
+      activo = encendido;
+      boton.setAttribute('aria-pressed', encendido ? 'true' : 'false');
+    }
+
+    function ocupado(encendido) {
+      boton.classList.toggle('procesando', encendido);
+      boton.disabled = encendido;
+    }
+
+    /* Añade el texto reconocido al final de lo que ya hay escrito. */
+    function agregar(texto) {
+      texto = String(texto || '').trim();
+      if (!texto) { return; }
+      var limite = parseInt(area.getAttribute('maxlength'), 10) || (CFG.maximoTema || 600);
+      var actual = area.value.trim();
+      var unido = actual ? (actual + ' ' + texto) : (texto.charAt(0).toUpperCase() + texto.slice(1));
+      if (unido.length > limite) { unido = unido.slice(0, limite); }
+      area.value = unido;
+      area.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    function iniciarCuenta() {
+      restantes = CONF.segundos || 120;
+      clearInterval(cuentaAtras);
+      cuentaAtras = setInterval(function () {
+        restantes--;
+        if (restantes <= 0) { detener(); return; }
+        if (activo) {
+          decir((motor === 'servidor' ? 'Grabando… ' : 'Escuchando… ') + restantes + ' s · toca el micrófono para terminar', 'grabando');
+        }
+      }, 1000);
+    }
+
+    function pararCuenta() { clearInterval(cuentaAtras); cuentaAtras = null; }
+
+    /* ---------- Dictado del propio navegador ---------- */
+
+    function iniciarNavegador() {
+      var Motor = window.SpeechRecognition || window.webkitSpeechRecognition;
+      reconocimiento = new Motor();
+      reconocimiento.lang = CONF.idioma || 'es-CO';
+      reconocimiento.continuous = true;
+      reconocimiento.interimResults = true;
+
+      reconocimiento.onstart = function () {
+        marcar(true);
+        decir('Escuchando… toca el micrófono para terminar', 'grabando');
+        iniciarCuenta();
+      };
+
+      reconocimiento.onresult = function (evento) {
+        var parcial = '';
+        for (var i = evento.resultIndex; i < evento.results.length; i++) {
+          var resultado = evento.results[i];
+          if (resultado.isFinal) { agregar(resultado[0].transcript); }
+          else { parcial += resultado[0].transcript; }
+        }
+        if (parcial.trim()) { decir('… ' + parcial.trim(), 'grabando'); }
+      };
+
+      reconocimiento.onerror = function (evento) {
+        var codigo = evento.error || '';
+        pararCuenta();
+        marcar(false);
+        if (codigo === 'not-allowed' || codigo === 'service-not-allowed') {
+          decir('No pudimos usar el micrófono. Permite el acceso en tu navegador o escribe la historia.', 'fallo');
+          return;
+        }
+        if (codigo === 'no-speech') { decir('No escuchamos nada. Vuelve a intentarlo.', 'fallo'); return; }
+        if (codigo === 'aborted') { decir(''); return; }
+        // Si el dictado del navegador no está disponible, probamos con el servidor.
+        if (CONF.servidor && soportaGrabacion()) {
+          motor = 'servidor';
+          decir('Cambiando al dictado del servidor…');
+          iniciarServidor();
+          return;
+        }
+        decir('El dictado no está disponible en este navegador. Puedes escribir la historia.', 'fallo');
+      };
+
+      reconocimiento.onend = function () {
+        pararCuenta();
+        marcar(false);
+        if (detenidoPorUsuario) { decir('Listo. Revisa el texto y corrige lo que quieras.'); }
+        detenidoPorUsuario = false;
+      };
+
+      try { reconocimiento.start(); }
+      catch (e) { decir('No se pudo iniciar el dictado. Inténtalo de nuevo.', 'fallo'); }
+    }
+
+    /* ---------- Grabación y transcripción en el servidor ---------- */
+
+    function iniciarServidor() {
+      decir('Pidiendo permiso del micrófono…');
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(function (flujo) {
+        pista = flujo;
+        trozos = [];
+        var opciones = {};
+        if (window.MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm')) {
+          opciones.mimeType = 'audio/webm';
+        }
+        grabadora = new MediaRecorder(flujo, opciones);
+        grabadora.ondataavailable = function (e) { if (e.data && e.data.size) { trozos.push(e.data); } };
+        grabadora.onstop = function () {
+          pararCuenta();
+          marcar(false);
+          cerrarPista();
+          if (!trozos.length) { decir('No se grabó nada. Inténtalo de nuevo.', 'fallo'); return; }
+          enviar(new Blob(trozos, { type: grabadora.mimeType || 'audio/webm' }));
+        };
+        grabadora.start();
+        marcar(true);
+        decir('Grabando… toca el micrófono para terminar', 'grabando');
+        iniciarCuenta();
+      }).catch(function () {
+        marcar(false);
+        decir('No pudimos usar el micrófono. Permite el acceso en tu navegador o escribe la historia.', 'fallo');
+      });
+    }
+
+    function cerrarPista() {
+      if (pista) {
+        pista.getTracks().forEach(function (t) { t.stop(); });
+        pista = null;
+      }
+    }
+
+    function enviar(audio) {
+      ocupado(true);
+      decir('Transcribiendo lo que dijiste…');
+      var datos = new FormData();
+      datos.append('token', CFG.token);
+      datos.append('audio', audio, 'dictado.webm');
+
+      fetch(CFG.rutas.transcribir, { method: 'POST', body: datos, credentials: 'same-origin' })
+        .then(function (r) { return r.json().catch(function () { return { ok: false, mensaje: 'El servidor respondió de forma inesperada.' }; }); })
+        .then(function (cuerpo) {
+          ocupado(false);
+          if (!cuerpo.ok) { decir(cuerpo.mensaje || 'No fue posible transcribir el audio.', 'fallo'); return; }
+          agregar(cuerpo.texto);
+          decir('Listo. Revisa el texto y corrige lo que quieras.');
+        })
+        .catch(function () {
+          ocupado(false);
+          decir('No hay conexión con el servidor. Escribe la historia o inténtalo de nuevo.', 'fallo');
+        });
+    }
+
+    /* ---------- Control ---------- */
+
+    function detener() {
+      detenidoPorUsuario = true;
+      pararCuenta();
+      if (motor === 'navegador' && reconocimiento) {
+        try { reconocimiento.stop(); } catch (e) { marcar(false); }
+      } else if (grabadora && grabadora.state === 'recording') {
+        try { grabadora.stop(); } catch (e) { marcar(false); cerrarPista(); }
+      } else {
+        marcar(false);
+      }
+    }
+
+    function alternar() {
+      if (activo) { detener(); return; }
+      detenidoPorUsuario = false;
+      if (motor === 'navegador') { iniciarNavegador(); } else { iniciarServidor(); }
+    }
+
+    function iniciar() {
+      boton = $('#dictar');
+      area = $('#tema');
+      estado = $('#estado-dictado');
+      if (!boton || !area) { return; }
+
+      motor = elegirMotor();
+      if (!motor) { boton.hidden = true; return; }
+
+      boton.hidden = false;
+      var caja = boton.parentNode;
+      if (caja && caja.classList) { caja.classList.add('con-dictado'); }
+      boton.addEventListener('click', alternar);
+      window.addEventListener('beforeunload', function () { cerrarPista(); });
+      return true;
+    }
+
+    return { iniciar: iniciar, detener: detener, activo: function () { return activo; } };
+  })();
+
   /* ============================================================ Flujo */
 
   var Flujo = (function () {
@@ -532,6 +758,7 @@
     }
 
     function irA(paso) {
+      if (paso !== 1 && Dictado.activo()) { Dictado.detener(); }
       estado.paso = paso;
       Object.keys(vistas).forEach(function (clave) {
         vistas[clave].classList.toggle('activa', Number(clave) === paso);
@@ -708,6 +935,8 @@
         if (campo.type === 'checkbox') { campo.checked = false; } else { campo.value = ''; }
       });
       botones.forEach(function (boton) { boton.setAttribute('aria-pressed', 'false'); });
+      var avisoDictado = $('#estado-dictado');
+      if (avisoDictado) { avisoDictado.textContent = ''; avisoDictado.className = 'estado-dictado'; }
       if (Escena.activa()) { Escena.seleccionar(null); }
       $('#proceso').hidden = false;
       $('#resultado').hidden = true;
@@ -757,6 +986,8 @@
         temporizador = setTimeout(acomodar, 120);
       });
       window.addEventListener('orientationchange', function () { setTimeout(acomodar, 250); });
+
+      Dictado.iniciar();
 
       acomodar();
       setTimeout(acomodar, 350);
