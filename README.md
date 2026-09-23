@@ -13,7 +13,7 @@ el panel **wj-admin**, sin tocar código.
 
 | Parte | Descripción |
 |---|---|
-| **Interfaz pública** (`index.php`) | Escena WebGL con las 16 tarjetas de género, retratos, partículas reactivas al audio y formulario en tres pasos. Funciona también sin WebGL. |
+| **Interfaz pública** (`index.php`) | Escena WebGL con las 16 tarjetas de género, retratos, partículas reactivas al audio y formulario en tres pasos. La historia se puede escribir o **dictar con el micrófono**. Funciona también sin WebGL. |
 | **Panel** (`wj-admin/`) | Registros con todos los datos y casillas **Creado SÍ/NO** y **Enviado SÍ/NO**, configuración de apariencia y géneros, APIs de IA con verificación, correo y credenciales. |
 | **Núcleo** (`wj-includes/`) | Configuración, almacenamiento en JSON, seguridad, correo (mail y SMTP), clientes de ElevenLabs y Google, y los puntos de acceso de la API pública. |
 | **Contenido** (`wj-content/`) | Ajustes, registros, audios generados, imágenes subidas y bitácoras. Es la única carpeta que necesita permisos de escritura. |
@@ -131,6 +131,22 @@ Las claves se muestran enmascaradas; si dejas el campo vacío se conserva la ant
 Nunca se escriben en el repositorio: viven en `wj-content/config/ajustes.json.php` (o en
 `claves.php`), ambos excluidos por `.gitignore`.
 
+### Dictado por voz
+El campo «Cuéntanos la historia de tu canción» tiene un micrófono para dictar el texto.
+Cuatro modos, en *APIs de IA → Dictado por voz*:
+
+| Modo | Qué hace |
+|---|---|
+| **Navegador y servidor** (predeterminado) | Usa el dictado del propio navegador y, si no lo soporta, graba el audio y lo transcribe con la API. |
+| **Solo el navegador** | Gratis e inmediato, sin consumir créditos. Funciona en Chrome, Edge y Safari. |
+| **Solo el servidor** | Graba y transcribe con ElevenLabs (`scribe_v1`) o Google. Funciona en cualquier navegador y consume créditos. |
+| **Desactivado** | No se muestra el micrófono. |
+
+También se configuran el idioma (`es-CO`), la duración máxima de la grabación y el máximo
+de transcripciones por hora y por IP. El micrófono solo aparece si el navegador de la
+persona puede usarlo, y **el dictado necesita que el sitio se sirva por HTTPS**
+(en Plesk, activa el certificado Let's Encrypt del dominio).
+
 ### Correo
 Remitente, asunto, plantilla del mensaje con etiquetas (`{nombre}`, `{genero}`, `{tema}`,
 `{codigo}`, `{titulo}`, `{letra}`…), adjunto MP3 y envío por `mail()` o SMTP. Incluye un
@@ -161,6 +177,10 @@ En el listado del panel puedes:
   formulario del panel como a las credenciales enviadas por cabecera.
 - Token CSRF en todos los formularios y llamadas del panel.
 - Límite de envíos por correo y por IP (configurable), más un campo trampa antirrobots.
+- El dictado por servidor valida el audio por sus bytes, lo borra en cuanto lo transcribe,
+  limita el tamaño a 10 MB y cuenta un máximo de transcripciones por hora y por IP.
+- Los errores técnicos de las APIs quedan en el registro y en la bitácora, no en la
+  pantalla del visitante.
 - La IP del visitante se toma de la conexión real. Si el sitio está detrás de un
   balanceador o una CDN, agrega su dirección en `seguridad.proxies_confiables` dentro de
   `wj-content/config/ajustes.json.php` para que se lean las cabeceras `X-Real-IP` o
@@ -233,6 +253,7 @@ wj-includes/
   api/registro.php            Guarda un registro (POST)
   api/generar.php             Genera la canción y envía el correo (POST)
   api/estado.php              Consulta el estado (GET)
+  api/transcribir.php         Convierte el audio dictado en texto (POST)
   css/app.css  css/admin.css  Estilos
   js/app.js  js/admin.js      Lógica de la experiencia y del panel
   js/vendor/three.min.js      three.js r149

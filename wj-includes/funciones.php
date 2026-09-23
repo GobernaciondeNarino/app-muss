@@ -343,3 +343,68 @@ function musa_http_reintento($url, $opciones = array(), $intentos = 3, $espera =
     }
     return $respuesta;
 }
+
+/**
+ * Arma un cuerpo multipart/form-data (para APIs que reciben archivos).
+ * Devuelve array('cuerpo' => string, 'cabecera' => string).
+ */
+function musa_multipart($campos, $archivo = null) {
+    $limite = '----musa' . bin2hex(random_bytes(12));
+    $cuerpo = '';
+    foreach ($campos as $nombre => $valor) {
+        $cuerpo .= '--' . $limite . "\r\n"
+            . 'Content-Disposition: form-data; name="' . $nombre . '"' . "\r\n\r\n"
+            . $valor . "\r\n";
+    }
+    if ($archivo !== null) {
+        $cuerpo .= '--' . $limite . "\r\n"
+            . 'Content-Disposition: form-data; name="' . $archivo['campo'] . '"; filename="' . $archivo['nombre'] . '"' . "\r\n"
+            . 'Content-Type: ' . $archivo['tipo'] . "\r\n\r\n"
+            . $archivo['contenido'] . "\r\n";
+    }
+    $cuerpo .= '--' . $limite . "--\r\n";
+    return array('cuerpo' => $cuerpo, 'cabecera' => 'Content-Type: multipart/form-data; boundary=' . $limite);
+}
+
+/**
+ * Reconoce el tipo de un audio por sus primeros bytes.
+ * Devuelve el tipo MIME o cadena vacía si no es un audio conocido.
+ */
+function musa_tipo_audio($contenido) {
+    if (strlen($contenido) < 12) { return ''; }
+    $inicio = substr($contenido, 0, 12);
+    if (strncmp($inicio, "\x1A\x45\xDF\xA3", 4) === 0) { return 'audio/webm'; }          // WebM / Matroska
+    if (strncmp($inicio, 'OggS', 4) === 0) { return 'audio/ogg'; }                        // Ogg
+    if (strncmp($inicio, 'RIFF', 4) === 0 && substr($inicio, 8, 4) === 'WAVE') { return 'audio/wav'; }
+    if (strncmp($inicio, 'ID3', 3) === 0) { return 'audio/mpeg'; }                        // MP3 con etiquetas
+    if ((ord($inicio[0]) === 0xFF) && ((ord($inicio[1]) & 0xE0) === 0xE0)) { return 'audio/mpeg'; }
+    if (substr($inicio, 4, 4) === 'ftyp') { return 'audio/mp4'; }                          // MP4 / M4A
+    if (strncmp($inicio, 'fLaC', 4) === 0) { return 'audio/flac'; }
+    return '';
+}
+
+/**
+ * Límite sencillo de uso por IP guardado en wj-content/logs.
+ * Devuelve true si se superó el límite en la última hora.
+ */
+function musa_limite_uso($clave, $ip, $maximo) {
+    if ($maximo <= 0) { return false; }
+    $archivo = MUSA_DIR_LOGS . '/uso-' . musa_slug($clave) . '.json.php';
+    $datos = musa_leer_json($archivo, array());
+    $ahora = time();
+    foreach ($datos as $llave => $marcas) {
+        $datos[$llave] = array_values(array_filter((array) $marcas, function ($m) use ($ahora) {
+            return (int) $m > $ahora - 3600;
+        }));
+        if ($datos[$llave] === array()) { unset($datos[$llave]); }
+    }
+    $propias = isset($datos[$ip]) ? $datos[$ip] : array();
+    if (count($propias) >= $maximo) {
+        musa_escribir_json($archivo, $datos);
+        return true;
+    }
+    $propias[] = $ahora;
+    $datos[$ip] = $propias;
+    musa_escribir_json($archivo, $datos);
+    return false;
+}

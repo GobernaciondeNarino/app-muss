@@ -86,6 +86,8 @@ function musa_ajustes_predeterminados() {
             'generando'       => 'Estamos componiendo tu canción…',
             'listo_titulo'    => '¡Listo! Tu canción va en camino',
             'listo_texto'     => 'Te avisaremos al correo apenas esté lista. Guarda tu código de seguimiento.',
+            'dictado_boton'   => 'Dictar con el micrófono',
+            'dictado_ayuda'   => 'Toca el micrófono y cuéntanos tu historia en voz alta.',
             'aviso_datos'     => 'Autorizo el tratamiento de mis datos personales conforme a la Ley 1581 de 2012 y la política de la Gobernación de Nariño.',
             'pie'             => 'Gobernación de Nariño · Musa Café',
         ),
@@ -115,6 +117,17 @@ function musa_ajustes_predeterminados() {
                 'modelo'         => 'gemini-3.6-flash',
                 'modelo_musica'  => 'lyria-3.5',
                 'generar_audio'  => false,
+            ),
+            'transcripcion' => array(
+                // navegador = dictado del propio navegador (gratis, sin API)
+                // servidor  = se graba y transcribe con la API configurada
+                // ambos     = navegador y, si no lo soporta, servidor
+                'modo'              => 'ambos',
+                'idioma'            => 'es-CO',
+                'maximo_segundos'   => 120,
+                'limite_por_hora'   => 30,
+                'elevenlabs_modelo' => 'scribe_v1',
+                'google_modelo'     => 'gemini-3.6-flash',
             ),
             'instruccion_letra' => "Eres un compositor colombiano. Escribe la letra de una canción original en español, con título, dos estrofas, un coro que se repita y un puente. Debe ser respetuosa, familiar y emotiva. Menciona de forma natural el café y la región de Nariño solo si encaja con la historia.",
         ),

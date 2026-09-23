@@ -58,10 +58,17 @@ $configJs = array(
         'listoTitulo' => (string) musa_dato($textos, 'listo_titulo', ''),
         'listoTexto'  => (string) musa_dato($textos, 'listo_texto', ''),
     ),
+    'dictado'  => array(
+        'modo'     => musa_transcripcion_modo($ajustes),
+        'servidor' => musa_transcripcion_servidor_disponible($ajustes),
+        'idioma'   => (string) musa_dato($ajustes, 'ia.transcripcion.idioma', 'es-CO'),
+        'segundos' => (int) musa_dato($ajustes, 'ia.transcripcion.maximo_segundos', 120),
+    ),
     'rutas'    => array(
-        'registro' => musa_url('wj-includes/api/registro.php'),
-        'generar'  => musa_url('wj-includes/api/generar.php'),
-        'estado'   => musa_url('wj-includes/api/estado.php'),
+        'registro'    => musa_url('wj-includes/api/registro.php'),
+        'generar'     => musa_url('wj-includes/api/generar.php'),
+        'estado'      => musa_url('wj-includes/api/estado.php'),
+        'transcribir' => musa_url('wj-includes/api/transcribir.php'),
     ),
 );
 ?>
@@ -151,9 +158,26 @@ $configJs = array(
       <div class="vista activa" id="vista-1">
         <div class="campo" style="flex:1">
           <label for="tema"><?php echo musa_e(musa_dato($textos, 'tema_etiqueta', 'Cuéntanos tu historia')); ?></label>
-          <textarea id="tema" name="tema" maxlength="<?php echo (int) musa_dato($form, 'maximo_tema', 600); ?>"
-            placeholder="<?php echo musa_e(musa_dato($textos, 'tema_ejemplo', '')); ?>"></textarea>
-          <span class="contador" id="contador-tema">0 / <?php echo (int) musa_dato($form, 'maximo_tema', 600); ?></span>
+          <div class="caja-historia">
+            <textarea id="tema" name="tema" maxlength="<?php echo (int) musa_dato($form, 'maximo_tema', 600); ?>"
+              placeholder="<?php echo musa_e(musa_dato($textos, 'tema_ejemplo', '')); ?>"></textarea>
+            <button type="button" class="dictado" id="dictar" hidden
+              aria-pressed="false" aria-controls="tema"
+              title="<?php echo musa_e(musa_dato($textos, 'dictado_boton', 'Dictar con el micrófono')); ?>">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+                stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <rect x="9" y="2" width="6" height="12" rx="3"></rect>
+                <path d="M5 11a7 7 0 0 0 14 0"></path>
+                <path d="M12 18v4"></path>
+                <path d="M8 22h8"></path>
+              </svg>
+              <span class="solo-lectores"><?php echo musa_e(musa_dato($textos, 'dictado_boton', 'Dictar con el micrófono')); ?></span>
+            </button>
+          </div>
+          <div class="pie-campo">
+            <span class="estado-dictado" id="estado-dictado" role="status" aria-live="polite"></span>
+            <span class="contador" id="contador-tema">0 / <?php echo (int) musa_dato($form, 'maximo_tema', 600); ?></span>
+          </div>
         </div>
         <div class="acciones">
           <span class="ayuda" id="ayuda-paso1"><?php echo musa_e(musa_dato($textos, 'paso1_ayuda', '')); ?></span>

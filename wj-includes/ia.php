@@ -429,3 +429,120 @@ function musa_ia_generar($identificador, $ajustes = null) {
 
     return array('ok' => true, 'mensaje' => $cambios['mensaje'], 'registro' => $actualizado);
 }
+
+/* ------------------------------------------------------------------ */
+/* Transcripción de voz a texto                                        */
+/* ------------------------------------------------------------------ */
+
+/** Modo de dictado configurado: navegador, servidor, ambos o ninguno. */
+function musa_transcripcion_modo($ajustes = null) {
+    if ($ajustes === null) { $ajustes = musa_ajustes(); }
+    $modo = (string) musa_dato($ajustes, 'ia.transcripcion.modo', 'ambos');
+    return in_array($modo, array('navegador', 'servidor', 'ambos', 'ninguno'), true) ? $modo : 'ambos';
+}
+
+/** ¿Hay una API disponible para transcribir en el servidor? */
+function musa_transcripcion_servidor_disponible($ajustes = null) {
+    if ($ajustes === null) { $ajustes = musa_ajustes(); }
+    if (!in_array(musa_transcripcion_modo($ajustes), array('servidor', 'ambos'), true)) { return false; }
+    return trim((string) musa_dato($ajustes, 'ia.elevenlabs.api_key', '')) !== ''
+        || trim((string) musa_dato($ajustes, 'ia.google.api_key', '')) !== '';
+}
+
+/** Transcribe con ElevenLabs (modelo scribe). */
+function musa_transcribir_elevenlabs($contenido, $tipo, $ajustes) {
+    $clave = trim((string) musa_dato($ajustes, 'ia.elevenlabs.api_key', ''));
+    if ($clave === '') { return array('ok' => false, 'mensaje' => 'Falta la clave de ElevenLabs.'); }
+
+    $base = rtrim((string) musa_dato($ajustes, 'ia.elevenlabs.endpoint', 'https://api.elevenlabs.io'), '/');
+    $modelo = (string) musa_dato($ajustes, 'ia.transcripcion.elevenlabs_modelo', 'scribe_v1');
+    $idioma = substr((string) musa_dato($ajustes, 'ia.transcripcion.idioma', 'es-CO'), 0, 2);
+
+    $extension = str_replace(array('audio/', 'x-'), '', $tipo);
+    if ($extension === 'mpeg') { $extension = 'mp3'; }
+    $partes = musa_multipart(
+        array('model_id' => $modelo, 'language_code' => $idioma),
+        array('campo' => 'file', 'nombre' => 'dictado.' . $extension, 'tipo' => $tipo, 'contenido' => $contenido)
+    );
+
+    $respuesta = musa_http_reintento($base . '/v1/speech-to-text', array(
+        'metodo'    => 'POST',
+        'cabeceras' => array($partes['cabecera'], 'xi-api-key: ' . $clave, 'Accept: application/json'),
+        'cuerpo'    => $partes['cuerpo'],
+        'tiempo'    => 120,
+    ), 2, 4);
+
+    if (!$respuesta['ok']) {
+        return array('ok' => false, 'mensaje' => 'ElevenLabs: ' . musa_ia_error_legible($respuesta));
+    }
+    $datos = json_decode($respuesta['cuerpo'], true);
+    $texto = is_array($datos) && isset($datos['text']) ? trim((string) $datos['text']) : '';
+    if ($texto === '') {
+        return array('ok' => false, 'mensaje' => 'No se entendió el audio. Intenta de nuevo hablando más cerca del micrófono.');
+    }
+    return array('ok' => true, 'texto' => $texto, 'motor' => 'ElevenLabs');
+}
+
+/** Transcribe con Google (audio incrustado en generateContent). */
+function musa_transcribir_google($contenido, $tipo, $ajustes) {
+    $clave = trim((string) musa_dato($ajustes, 'ia.google.api_key', ''));
+    if ($clave === '') { return array('ok' => false, 'mensaje' => 'Falta la clave de Google.'); }
+
+    $base = rtrim((string) musa_dato($ajustes, 'ia.google.endpoint', 'https://generativelanguage.googleapis.com'), '/');
+    $modelo = (string) musa_dato($ajustes, 'ia.transcripcion.google_modelo', 'gemini-3.6-flash');
+
+    $peticion = array(
+        'contents' => array(array(
+            'role' => 'user',
+            'parts' => array(
+                array('text' => 'Transcribe literalmente lo que se dice en este audio, en español. Responde solo con la transcripción, sin comentarios ni comillas.'),
+                array('inlineData' => array('mimeType' => $tipo, 'data' => base64_encode($contenido))),
+            ),
+        )),
+        'generationConfig' => array('temperature' => 0, 'maxOutputTokens' => 2000),
+    );
+
+    $respuesta = musa_http_reintento($base . '/v1beta/models/' . rawurlencode($modelo) . ':generateContent', array(
+        'metodo'    => 'POST',
+        'cabeceras' => array('Content-Type: application/json', 'x-goog-api-key: ' . $clave),
+        'cuerpo'    => json_encode($peticion, JSON_UNESCAPED_UNICODE),
+        'tiempo'    => 120,
+    ), 2, 4);
+
+    if (!$respuesta['ok']) {
+        return array('ok' => false, 'mensaje' => 'Google: ' . musa_ia_error_legible($respuesta));
+    }
+    $partes = musa_ia_partes_google($respuesta['cuerpo']);
+    $texto = trim($partes['texto']);
+    if ($texto === '') {
+        return array('ok' => false, 'mensaje' => 'No se entendió el audio. Intenta de nuevo hablando más cerca del micrófono.');
+    }
+    return array('ok' => true, 'texto' => $texto, 'motor' => 'Google');
+}
+
+/**
+ * Transcribe un audio con el proveedor configurado.
+ * Si el proveedor principal falla, intenta con el otro.
+ */
+function musa_ia_transcribir($contenido, $tipo, $ajustes = null) {
+    if ($ajustes === null) { $ajustes = musa_ajustes(); }
+
+    $proveedor = musa_ia_proveedor($ajustes);
+    $orden = ($proveedor === 'google') ? array('google', 'elevenlabs') : array('elevenlabs', 'google');
+
+    $mensajes = array();
+    foreach ($orden as $motor) {
+        $clave = trim((string) musa_dato($ajustes, 'ia.' . $motor . '.api_key', ''));
+        if ($clave === '') { continue; }
+        $resultado = ($motor === 'google')
+            ? musa_transcribir_google($contenido, $tipo, $ajustes)
+            : musa_transcribir_elevenlabs($contenido, $tipo, $ajustes);
+        if (!empty($resultado['ok'])) { return $resultado; }
+        $mensajes[] = $resultado['mensaje'];
+    }
+
+    if ($mensajes === array()) {
+        return array('ok' => false, 'mensaje' => 'No hay ninguna clave de API configurada para transcribir.');
+    }
+    return array('ok' => false, 'mensaje' => implode(' · ', $mensajes));
+}

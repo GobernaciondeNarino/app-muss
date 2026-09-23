@@ -299,6 +299,96 @@ textarea, input[type="text"], input[type="email"], input[type="tel"] {
 
 textarea { resize: none; min-height: 96px; line-height: 1.5; flex: 1; }
 
+/* ---------- Campo de la historia con dictado ---------- */
+
+.caja-historia {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* El espacio para el micrófono solo se reserva si el micrófono está disponible. */
+.caja-historia.con-dictado textarea { padding-right: 62px; }
+
+.dictado {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--musa-tarjeta-borde);
+  background: rgba(0, 0, 0, .35);
+  color: var(--musa-texto);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background .2s ease, color .2s ease, border-color .2s ease, transform .18s ease;
+}
+
+.dictado:hover { transform: translateY(-2px); border-color: var(--musa-acento); color: var(--musa-acento); }
+.dictado:focus-visible { outline: 3px solid var(--musa-acento); outline-offset: 3px; }
+
+.dictado[aria-pressed="true"] {
+  background: var(--musa-acento);
+  color: var(--musa-texto-activo);
+  border-color: var(--musa-acento);
+}
+
+.dictado[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--musa-acento);
+  animation: latido 1.6s ease-out infinite;
+  pointer-events: none;
+}
+
+.dictado.procesando { pointer-events: none; }
+
+.dictado.procesando svg { opacity: .25; }
+
+.dictado.procesando::before {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--musa-acento);
+  animation: giro .9s linear infinite;
+}
+
+@keyframes latido {
+  0% { transform: scale(.85); opacity: .7; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
+@keyframes giro { to { transform: rotate(360deg); } }
+
+.pie-campo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.estado-dictado {
+  font-size: 12px;
+  color: var(--musa-texto-suave);
+  min-height: 15px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.estado-dictado.grabando { color: var(--musa-acento); }
+.estado-dictado.fallo { color: var(--musa-error); white-space: normal; }
+
 textarea:focus, input:focus {
   border-color: var(--musa-acento);
   box-shadow: 0 0 0 3px rgba(var(--musa-acento-rgb), .22);
@@ -312,7 +402,7 @@ textarea:focus, input:focus {
   gap: 12px;
 }
 
-.contador { font-size: 11.5px; color: var(--musa-texto-suave); text-align: right; }
+.contador { font-size: 11.5px; color: var(--musa-texto-suave); text-align: right; white-space: nowrap; }
 
 .acepto {
   display: flex;
@@ -473,6 +563,8 @@ audio { width: 100%; height: 40px; }
 }
 
 @media (max-width: 520px) {
+  .pie-campo { flex-wrap: wrap; }
+  .estado-dictado { white-space: normal; flex: 1 0 100%; order: 2; }
   .encabezado h1 { font-size: 22px; }
   .pasos { display: none; }
   .deco-barra { display: none; }
@@ -480,5 +572,6 @@ audio { width: 100%; height: 40px; }
 
 @media (prefers-reduced-motion: reduce) {
   .barras span, .vista { animation: none; }
-  .boton:hover { transform: none; }
+  .boton:hover, .dictado:hover { transform: none; }
+  .dictado[aria-pressed="true"]::after { animation: none; opacity: .5; }
 }
